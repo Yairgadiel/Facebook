@@ -26,11 +26,12 @@ import android.os.Build;
 import android.os.Bundle;
 import android.provider.DocumentsContract;
 import android.text.method.ScrollingMovementMethod;
-import android.util.Pair;
 import android.util.Size;
 import android.view.View;
 import android.view.WindowInsets;
 import android.widget.TextView;
+import android.widget.Toast;
+
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
@@ -44,16 +45,17 @@ import androidx.camera.view.PreviewView;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.documentfile.provider.DocumentFile;
-import androidx.lifecycle.LifecycleOwner;
+import androidx.recyclerview.widget.LinearLayoutManager;
+
 import com.google.common.util.concurrent.ListenableFuture;
 import com.ml.quaterion.facenetdetection.databinding.ActivityMainBinding;
 import com.ml.quaterion.facenetdetection.model.FaceNetModel;
 import com.ml.quaterion.facenetdetection.model.ModelInfo;
 import com.ml.quaterion.facenetdetection.model.Models;
+import com.ml.quaterion.facenetdetection.ui.PredicationsAdapter;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
@@ -130,8 +132,14 @@ public class MainActivity extends AppCompatActivity {
         boundingBoxOverlay.setWillNotDraw(false);
         boundingBoxOverlay.setZOrderOnTop(true);
 
+        PredicationsAdapter adapter = new PredicationsAdapter();
+        adapter.setOnItemClickListener(prediction -> Toast.makeText(MainActivity.this, prediction.getLabel(), Toast.LENGTH_SHORT).show());
+
+        activityMainBinding.predicationsRv.setAdapter(adapter);
+        activityMainBinding.predicationsRv.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
+
         faceNetModel = new FaceNetModel(this, modelInfo, useGpu, useXNNPack);
-        frameAnalyser = new FrameAnalyser(this, boundingBoxOverlay, faceNetModel);
+        frameAnalyser = new FrameAnalyser(this, boundingBoxOverlay, faceNetModel, adapter);
         fileReader = new FileReader(faceNetModel);
 
         // We'll only require the CAMERA permission from the user.
@@ -332,16 +340,6 @@ public class MainActivity extends AppCompatActivity {
         }
         return imageBitmap;
     }
-
-    private final FileReader.ProcessCallback fileReaderCallback = new FileReader.ProcessCallback() {
-        @Override
-        public void onProcessCompleted(@NonNull ArrayList<kotlin.Pair<String, float[]>> data, int numImagesWithNoFaces) {
-            frameAnalyser.setFaceList(data);
-            saveSerializedImageData(data);
-            Logger.Companion.log("Images parsed. Found " + numImagesWithNoFaces + " images with no faces.");
-        }
-
-    };
 
     private void saveSerializedImageData(ArrayList<kotlin.Pair<String, float[]>> data) {
         File serializedDataFile = new File(getFilesDir(), SERIALIZED_DATA_FILENAME);
