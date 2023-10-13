@@ -26,6 +26,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.provider.DocumentsContract;
 import android.text.method.ScrollingMovementMethod;
+import android.util.Log;
 import android.util.Size;
 import android.view.View;
 import android.view.WindowInsets;
@@ -35,6 +36,7 @@ import android.widget.Toast;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.camera.core.CameraSelector;
@@ -114,18 +116,58 @@ public class MainActivity extends AppCompatActivity {
 
         // Remove the status bar to have a full screen experience
         // See this answer on SO -> https://stackoverflow.com/a/68152688/10878733
+
+        String[] permissions = {
+                Manifest.permission.READ_EXTERNAL_STORAGE
+        };
+
+
+        boolean allGranted = true;
+
+        for (String permission : permissions) {
+            if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
+                allGranted = false;
+                break;
+            }
+        }
+
+        if (allGranted) {
+            loadApp();
+        }
+        else {
+            requestFilesPermissions();
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+
+        if (requestCode == 123) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                loadApp();
+            }
+            else {
+                Log.d("Log", "permission not granted.");
+            }
+        }
+    }
+
+    private void loadApp() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             getWindow().getDecorView().getWindowInsetsController()
                     .hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
         } else {
             getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN);
         }
+
         activityMainBinding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(activityMainBinding.getRoot());
 
         previewView = activityMainBinding.previewView;
         logTextView = activityMainBinding.logTextview;
         logTextView.setMovementMethod(new ScrollingMovementMethod());
+
         // Necessary to keep the Overlay above the PreviewView so that the boxes are visible.
         BoundingBoxOverlay boundingBoxOverlay = activityMainBinding.bboxOverlay;
         boundingBoxOverlay.setCameraFacing(cameraFacing);
@@ -133,8 +175,16 @@ public class MainActivity extends AppCompatActivity {
         boundingBoxOverlay.setZOrderOnTop(true);
 
         PredicationsAdapter adapter = new PredicationsAdapter();
-        adapter.setOnItemClickListener(prediction -> Toast.makeText(MainActivity.this, prediction.getLabel(), Toast.LENGTH_SHORT).show());
+        adapter.setOnItemClickListener(prediction -> {
+            Intent intent = new Intent(getApplicationContext(), PersonActivity.class);
+            intent.putExtra(PersonActivity.PERSON_FOLDER_PATH_KEY, prediction.getLabel());
+            intent.putExtra(PersonActivity.PERSON_IMAGE_PATH_KEY, prediction.getImage());
+            startActivity(intent);
 
+            Toast.makeText(MainActivity.this, prediction.getLabel(), Toast.LENGTH_SHORT).show();
+        });
+
+        Utils.setContext(this);
         activityMainBinding.predicationsRv.setAdapter(adapter);
         activityMainBinding.predicationsRv.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
 
@@ -203,6 +253,34 @@ public class MainActivity extends AppCompatActivity {
         imageFrameAnalysis.setAnalyzer(Executors.newSingleThreadExecutor(), frameAnalyser);
         cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageFrameAnalysis);
     }
+
+    private void requestFilesPermissions() {
+        filesPermissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE);
+    }
+
+    private final ActivityResultLauncher<String> filesPermissionLauncher = registerForActivityResult(
+            new ActivityResultContracts.RequestPermission(),
+            isGranted -> {
+                if (isGranted) {
+                    loadApp();
+                } else {
+                    AlertDialog alertDialog = new AlertDialog.Builder(this)
+                            .setTitle("files Permission")
+                            .setMessage("The app couldn't function without the files permission.")
+                            .setCancelable(false)
+                            .setPositiveButton("ALLOW", (dialog, which) -> {
+                                dialog.dismiss();
+                                requestFilesPermissions();
+                            })
+                            .setNegativeButton("CLOSE", (dialog, which) -> {
+                                dialog.dismiss();
+                                finish();
+                            })
+                            .create();
+                    alertDialog.show();
+                }
+            }
+    );
 
     // We let the system handle the requestCode. This doesn't require onRequestPermissionsResult and
     // hence makes the code cleaner.
@@ -294,6 +372,8 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 if (!errorFound) {
+                    Utils.setMainDirectory(dirUri);
+
                     fileReader.run(images, new FileReader.ProcessCallback() {
                         @Override
                         public void onProcessCompleted(@NonNull ArrayList<kotlin.Pair<String, float[]>> data, int numImagesWithNoFaces) {
