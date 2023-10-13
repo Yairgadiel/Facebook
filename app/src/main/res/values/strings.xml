@@ -1,3 +1,9 @@
 <resources>
     <string name="app_name">FaceNet Detection</string>
+<<<<<<< Updated upstream
+=======
+    <string name="title_activity_person">PersonActivity</string>
+    <string name="title_activity_capture">StaticCaptureActivity</string>
+    <string name="process">Process</string>
+>>>>>>> Stashed changes
 </resources>
