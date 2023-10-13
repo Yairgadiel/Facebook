@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">FaceNet Detection</string>
+    <string name="title_activity_person">PersonActivity</string>
+</resources>
