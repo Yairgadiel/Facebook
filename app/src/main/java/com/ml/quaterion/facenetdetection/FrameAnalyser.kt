@@ -30,8 +30,13 @@ import com.ml.quaterion.facenetdetection.ui.PredicationsAdapter
 import com.ml.quaterion.facenetdetection.ui.UiPrediction
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import kotlin.math.pow
 import kotlin.math.sqrt
 
@@ -252,66 +257,60 @@ class StaticFrameAnalyser(val model: FaceNetModel, val faceList: ArrayList<Pair<
 
     private val nameScoreHashmap = HashMap<String, ArrayList<Float>>()
 
-    private var subject = FloatArray(model.embeddingDim)
+    fun inferSinglePerson(cameraFramesBitmap: ArrayList<Bitmap>): ArrayList<Pair<String, Float>> = runBlocking {
+        if (cameraFramesBitmap.isEmpty()) {
+            Log.e("Model", "No images provided")
+            return@runBlocking arrayListOf()
+        }
 
-
-    // TODO: call this function with images from camera reel
-    // Multiple images of same person
-    public fun inferSinglePerson(cameraFramesBitmap: ArrayList<Bitmap>): ArrayList<Pair<String, Float>> {
         val imageBitmap = cameraFramesBitmap[0]
-
-        // InputImage is MLKIT object
         val inputImage = InputImage.fromBitmap(imageBitmap, 0)
 
-        detector.process(inputImage)
-            .addOnSuccessListener { faces ->
-                val predictions = ArrayList<Prediction>()
-                for (face in faces) {
-                    try {
-                        val croppedBitmap = BitmapUtils.cropRectFromBitmap(imageBitmap, face.boundingBox)
-
-                        // Runs FaceNet
-                        val subject = model.getFaceEmbedding(croppedBitmap)
-
-                        // Grouping similar faces using cosine similarity
-                        for (i in 0 until faceList.size) {
-                            nameScoreHashmap.compute(faceList[i].first) { _, scores ->
-                                // if cluster doesn't exist, initialize a new one
-                                val p = scores ?: ArrayList<Float>()
-                                p.add(cosineSimilarity(subject, faceList[i].second))
-                                p  // reassign the updated list
+        suspendCancellableCoroutine<ArrayList<Pair<String, Float>>> { continuation ->
+            detector.process(inputImage)
+                .addOnSuccessListener { faces ->
+                    val predictions = ArrayList<Pair<String, Float>>()
+                    for (face in faces) {
+                        try {
+                            val croppedBitmap = BitmapUtils.cropRectFromBitmap(imageBitmap, face.boundingBox)
+                            val subject = model.getFaceEmbedding(croppedBitmap)
+                            // Grouping similar faces using cosine similarity
+                            for (i in 0 until faceList.size) {
+                                nameScoreHashmap.compute(faceList[i].first) { _, scores ->
+                                    // if cluster doesn't exist, initialize a new one
+                                    val p = scores ?: ArrayList<Float>()
+                                    p.add(cosineSimilarity(subject, faceList[i].second))
+                                    p  // reassign the updated list
+                                }
                             }
+
+                            // Compute the average of all cosine similarity scores for each cluster
+                            val avgScores = nameScoreHashmap.values.map { scores ->
+                                scores.toFloatArray().average()
+                            }
+                            Logger.log("Average score for each user : $nameScoreHashmap")
+
+                            val names = nameScoreHashmap.keys.toTypedArray()
+                            nameScoreHashmap.clear()
+
+                            val bestScoreUserName = if (avgScores.maxOrNull()!! > model.model.cosineThreshold) {
+                                names[avgScores.indexOf(avgScores.maxOrNull()!!)]
+                            } else {
+                                "Unknown"
+                            }
+                            // Assuming the score you want to associate with each name is avgScores.maxOrNull()!!
+                            predictions.add(Pair(bestScoreUserName, avgScores.maxOrNull()!!.toFloat()))
+                        } catch (e: Exception) {
+                            Log.e("Model", "Exception in FrameAnalyser", e)
+                            continue
                         }
-
-                        // Compute the average of all cosine similarity scores for each cluster
-                        val avgScores = nameScoreHashmap.values.map { scores ->
-                            scores.toFloatArray().average()
-                        }
-                        Logger.log("Average score for each user : $nameScoreHashmap")
-
-                        val names = nameScoreHashmap.keys.toTypedArray()
-                        nameScoreHashmap.clear()
-
-                        // Identify the person based on cosine similarity
-                        val bestScoreUserName = if (avgScores.maxOrNull()!! > model.model.cosineThreshold) {
-                            names[avgScores.indexOf(avgScores.maxOrNull()!!)]
-                        } else {
-                            "Unknown"
-                        }
-                        Logger.log("Person identified as $bestScoreUserName")
-                        predictions.add(Prediction(face.boundingBox, bestScoreUserName))
-
-                    } catch (e: Exception) {
-                        // Handle any exception and continue with the next boxes
-                        Log.e("Model", "Exception in FrameAnalyser : ${e.message}")
-                        continue
                     }
+                    continuation.resume(predictions)
                 }
-            }
-
-        return arrayListOf(
-            Pair("Izik", 100.0f)
-        )
+                .addOnFailureListener { exception ->
+                    continuation.resumeWithException(exception)
+                }
+        }
     }
 }
 

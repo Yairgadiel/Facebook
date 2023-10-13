@@ -2,6 +2,7 @@ package com.ml.quaterion.facenetdetection
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.ml.quaterion.facenetdetection.model.FaceNetModel
@@ -16,6 +17,7 @@ import java.io.ObjectInputStream
 class FaceRecognizerTest {
 
     private lateinit var staticFrameAnalyser: StaticFrameAnalyser
+
     private fun loadSerializedImageData(context: Context): ArrayList<Pair<String, FloatArray>> {
         val imageData = context.assets.open("image_data")
         return try {
@@ -39,8 +41,13 @@ class FaceRecognizerTest {
 
     @Test
     fun testInferSinglePerson() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val imageData = context.assets.open("2.jpg")
+        val bitmap = BitmapFactory.decodeStream(imageData)
+
         // Create a controlled input
         val inputBitmaps = arrayListOf<Bitmap>()
+        inputBitmaps.add(bitmap)
 
         // Call the method you're testing
         val result = staticFrameAnalyser.inferSinglePerson(inputBitmaps)
