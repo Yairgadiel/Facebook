@@ -56,6 +56,8 @@ import com.ml.quaterion.facenetdetection.model.FaceNetModel;
 import com.ml.quaterion.facenetdetection.model.ModelInfo;
 import com.ml.quaterion.facenetdetection.model.Models;
 import com.ml.quaterion.facenetdetection.ui.PredicationsAdapter;
+import com.ml.quaterion.facenetdetection.data.Person;
+import com.ml.quaterion.facenetdetection.data.PersonReader;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -66,6 +68,8 @@ import java.io.ObjectOutputStream;
 import java.util.ArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
+import java.util.Map;
+
 
 public class MainActivity extends AppCompatActivity {
 
@@ -87,6 +91,7 @@ public class MainActivity extends AppCompatActivity {
     private ListenableFuture<ProcessCameraProvider> cameraProviderFuture;
     private SharedPreferences sharedPreferences;
 
+    private Map<String, Person> personData;
     // <----------------------- User controls --------------------------->
 
     // Use the device's GPU to perform faster computations.
@@ -233,6 +238,11 @@ public class MainActivity extends AppCompatActivity {
                     .create();
             alertDialog.show();
         }
+
+        requestFilePermissions();
+        PersonReader personReader = new PersonReader("/storage/834C-0FE8/Documents/face/example.csv", ".");
+        personData = personReader.read();
+        Logger.Companion.log(personData.toString());
     }
 
     // Attach the camera stream to the PreviewView.
@@ -270,6 +280,11 @@ public class MainActivity extends AppCompatActivity {
         cameraPermissionLauncher.launch(Manifest.permission.CAMERA);
     }
 
+    private void requestFilePermissions() {
+        filePermissionsLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE);
+//        filePermissionsLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE);
+    }
+
     private final ActivityResultLauncher<String> cameraPermissionLauncher = registerForActivityResult(
             new ActivityResultContracts.RequestPermission(),
             isGranted -> {
@@ -283,6 +298,30 @@ public class MainActivity extends AppCompatActivity {
                             .setPositiveButton("ALLOW", (dialog, which) -> {
                                 dialog.dismiss();
                                 requestCameraPermission();
+                            })
+                            .setNegativeButton("CLOSE", (dialog, which) -> {
+                                dialog.dismiss();
+                                finish();
+                            })
+                            .create();
+                    alertDialog.show();
+                }
+            }
+    );
+
+    private final ActivityResultLauncher<String> filePermissionsLauncher = registerForActivityResult(
+            new ActivityResultContracts.RequestPermission(),
+            isGranted -> {
+                if (isGranted) {
+//                    startCameraPreview();
+                } else {
+                    AlertDialog alertDialog = new AlertDialog.Builder(this)
+                            .setTitle("Files Permission")
+                            .setMessage("The app couldn't function without the camera permission.")
+                            .setCancelable(false)
+                            .setPositiveButton("ALLOW", (dialog, which) -> {
+                                dialog.dismiss();
+                                requestFilePermissions();
                             })
                             .setNegativeButton("CLOSE", (dialog, which) -> {
                                 dialog.dismiss();
