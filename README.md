@@ -99,7 +99,7 @@ See [`FaceNetModel.kt`](https://github.com/shubham0204/FaceRecognition_With_Face
   
 ## Limitations  
   
-Predictions may go wrong as FaceNet does not always produce similar embeddings for the same person. 
+Predictions may go wrong as FaceNet does not always produce similar embeddings for the same historySearch. 
 Consider the accuracy of the FaceNet model while using it in your apps. In that case, you may learn to use the `FaceNetModel` class separating for using FaceNet in some other tasks.  
 
 ## Important Resources  
