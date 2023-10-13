@@ -47,6 +47,7 @@ import androidx.core.content.ContextCompat;
 import androidx.documentfile.provider.DocumentFile;
 import androidx.recyclerview.widget.LinearLayoutManager;
 
+import com.google.android.material.bottomnavigation.BottomNavigationView;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.ml.quaterion.facenetdetection.databinding.ActivityMainBinding;
 import com.ml.quaterion.facenetdetection.model.FaceNetModel;
@@ -111,6 +112,9 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // Get the bottom navigation view.
+        BottomNavigationView bottomNavigationView = findViewById(R.id.bottom_navigation);
 
         // Remove the status bar to have a full screen experience
         // See this answer on SO -> https://stackoverflow.com/a/68152688/10878733

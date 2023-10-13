@@ -1,4 +1,9 @@
 <resources>
     <string name="app_name">FaceNet Detection</string>
     <string name="title_activity_person">PersonActivity</string>
+
+    <string name="tab_live_capture">Live</string>
+    <string name="tab_gallery">Static</string>
+    <string name="tab_history">History</string>
+    <string name="tab_settings">Settings</string>
 </resources>
