@@ -239,7 +239,7 @@ public class MainActivity extends AppCompatActivity {
             alertDialog.show();
         }
 
-        PersonReader personReader = new PersonReader("/storage/834C-0FE8/Documents/face/example.csv", ".");
+        PersonReader personReader = new PersonReader("/sdcard/face/example.csv", "/sdcard/face/images/");
         personData = personReader.read();
         Logger.Companion.log(personData.toString());
     }
