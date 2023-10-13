@@ -17,10 +17,7 @@ package com.ml.quaterion.facenetdetection.model
 import android.content.Context
 import android.graphics.Bitmap
 import android.util.Log
-import com.google.mlkit.vision.face.FaceDetector
 import com.ml.quaterion.facenetdetection.Logger
-import org.junit.Before
-import org.junit.Test
 import org.tensorflow.lite.DataType
 import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.gpu.CompatibilityList
@@ -32,10 +29,7 @@ import org.tensorflow.lite.support.image.TensorImage
 import org.tensorflow.lite.support.image.ops.ResizeOp
 import org.tensorflow.lite.support.tensorbuffer.TensorBuffer
 import org.tensorflow.lite.support.tensorbuffer.TensorBufferFloat
-import java.io.File
-import java.io.FileInputStream
 import java.nio.ByteBuffer
-import java.nio.MappedByteBuffer
 import kotlin.math.max
 import kotlin.math.pow
 import kotlin.math.sqrt

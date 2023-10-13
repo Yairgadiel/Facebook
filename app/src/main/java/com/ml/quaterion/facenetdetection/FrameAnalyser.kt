@@ -20,26 +20,18 @@ import android.graphics.Bitmap
 import android.util.Log
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
-import androidx.test.core.app.ApplicationProvider
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.Face
 import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
 import com.ml.quaterion.facenetdetection.model.FaceNetModel
 import com.ml.quaterion.facenetdetection.model.MaskDetectionModel
-import com.ml.quaterion.facenetdetection.model.Models.Companion.FACENET
 import com.ml.quaterion.facenetdetection.ui.PredicationsAdapter
 import com.ml.quaterion.facenetdetection.ui.UiPrediction
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.junit.Assert.assertEquals
-import org.junit.Before
-import org.junit.Test
-import java.io.File
-import java.io.FileInputStream
-import java.io.ObjectInputStream
 import kotlin.math.pow
 import kotlin.math.sqrt
 
@@ -323,7 +315,8 @@ class StaticFrameAnalyser(val model: FaceNetModel, val faceList: ArrayList<Pair<
     }
 }
 
-private fun List<Prediction>.toUiItems() = map { UiPrediction(label = it.label, image = Utils.getPicturePath(it.label)) }
+//private fun List<Prediction>.toUiItems() = map { UiPrediction(label = it.label, image = Utils.getPicturePath(it.label)) }
+
 // Compute the L2 norm of ( x2 - x1 )
 private fun L2Norm(x1: FloatArray, x2: FloatArray): Float {
     return sqrt(x1.mapIndexed { i, xi -> (xi - x2[i]).pow(2) }.sum())
@@ -338,44 +331,3 @@ private fun cosineSimilarity(x1: FloatArray, x2: FloatArray): Float {
 }
 
 private fun List<Prediction>.toUiItems() = map { UiPrediction(label = it.label, image = "") }
-
-class FaceRecognizerTest {
-    private lateinit var staticFrameAnalyser: StaticFrameAnalyser
-
-    private fun loadSerializedImageData(context: Context): ArrayList<Pair<String, FloatArray>> {
-        val imageData = context.assets.open("image_data")
-
-        try {
-            val ois = ObjectInputStream(imageData)
-            val data = ois.readObject()
-            ois.close()
-            return data as ArrayList<Pair<String, FloatArray>>
-        } catch (e: java.lang.Exception) {
-            e.printStackTrace()
-        }
-        return arrayListOf()
-    }
-
-
-    @Before
-    fun setup() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-
-        val modelInfo = FACENET
-        val faceNetModel = FaceNetModel(context, modelInfo, useGpu = false, useXNNPack = false)
-
-        staticFrameAnalyser = StaticFrameAnalyser(faceNetModel, loadSerializedImageData(context))
-    }
-
-    @Test
-    fun testInferSinglePerson() {
-        // Create a controlled input
-        val inputBitmaps = arrayListOf<Bitmap>()
-
-        // Call the method you're testing
-        val result = staticFrameAnalyser.inferSinglePerson(inputBitmaps)
-
-        val person = result[0].first
-        assertEquals("izik", person)
-    }
-}
