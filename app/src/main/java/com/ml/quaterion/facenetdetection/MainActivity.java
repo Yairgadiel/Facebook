@@ -266,7 +266,7 @@ public class MainActivity extends AppCompatActivity {
                 ArrayList<kotlin.Pair<String, Bitmap>> images = new ArrayList<>();
                 boolean errorFound = false;
 
-                if (tree.listFiles().length > 0) {
+                if (tree != null && tree.listFiles().length > 0) {
                     for (DocumentFile doc : tree.listFiles()) {
                         if (doc.isDirectory() && !errorFound) {
                             String name = doc.getName();
@@ -275,30 +275,34 @@ public class MainActivity extends AppCompatActivity {
                                     images.add(new kotlin.Pair<>(name, getFixedBitmap(imageDocFile.getUri())));
                                 } catch (Exception e) {
                                     errorFound = true;
-                                    Logger.Companion.log("Could not parse an image in " + name + " directory. " +
-                                            "Make sure that the file structure is as described in the README of the project and then restart the app.");
+                                    Logger.Companion.log("Could not parse an image in " + name + " directory. ");
                                     break;
                                 }
                             }
                             Logger.Companion.log("Found " + doc.listFiles().length + " images in " + name + " directory");
                         } else {
                             errorFound = true;
-                            Logger.Companion.log("The selected folder should contain only directories. " +
-                                    "Make sure that the file structure is as described in the README of the project and then restart the app.");
+                            Logger.Companion.log("The selected folder should contain only directories. ");
                         }
                     }
                 } else {
                     errorFound = true;
-                    Logger.Companion.log("The selected folder doesn't contain any directories. " +
-                            "Make sure that the file structure is as described in the README of the project and then restart the app.");
+                    Logger.Companion.log("The selected folder doesn't contain any directories.");
+                }
+
+                if (images.isEmpty()) {
+                    errorFound = true;
+                    Logger.Companion.log("The selected folder is empty.");
                 }
 
                 if (!errorFound) {
+                    activityMainBinding.loader.setVisibility(View.VISIBLE);
                     fileReader.run(images, new FileReader.ProcessCallback() {
                         @Override
                         public void onProcessCompleted(@NonNull ArrayList<kotlin.Pair<String, float[]>> data, int numImagesWithNoFaces) {
                             frameAnalyser.setFaceList(data);
                             saveSerializedImageData(data);
+                            activityMainBinding.loader.setVisibility(View.INVISIBLE);
                             Logger.Companion.log("Images parsed. Found " + numImagesWithNoFaces + " images with no faces.");
                         }
                     });
