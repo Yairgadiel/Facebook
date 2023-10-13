@@ -5,27 +5,28 @@ import com.ml.quaterion.facenetdetection.Logger
 import kotlin.collections.Map
 import java.io.File
 import java.io.FileNotFoundException
+import java.nio.file.Paths
+
 class PersonReader(private val path: String, private val baseImagesPath: String) {
     fun read(): Map<String, Person> {
         val data = mutableMapOf<String, Person>()
         try {
-            Logger.Companion.log("WOHOO1");
             val file = File(path)
-            Logger.Companion.log("WOHOO2");
-
             val rows: List<Map<String, String>> = csvReader().readAllWithHeader(file)
-            Logger.Companion.log(rows.count().toString());
 
             for (row in rows) {
-                Logger.Companion.log(row.toString());
+                val personId = row["id"]!!;
+                val imageBaseDir = File(baseImagesPath);
+                val pathToImg = File(imageBaseDir, "$personId.jpg")
+
                 val person = Person(
-                    row["id"]!!,
+                    personId,
                     row["name"]!!,
-                    row["age"]!!.toInt(),
-                    row["gender"]!!,
-                    row["status"]!!,
-                    row["description"]!!,
-                    ArrayList<String>()
+                    (row["age"]?:"-1").toInt(),
+                    (row["gender"]?:"N/A"),
+                    (row["status"]?:"N/A"),
+                    (row["description"]?:"N/A"),
+                    pathToImg.absolutePath
                 );
                 data[person.id] = person;
 

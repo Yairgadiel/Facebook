@@ -239,7 +239,6 @@ public class MainActivity extends AppCompatActivity {
             alertDialog.show();
         }
 
-        requestFilePermissions();
         PersonReader personReader = new PersonReader("/storage/834C-0FE8/Documents/face/example.csv", ".");
         personData = personReader.read();
         Logger.Companion.log(personData.toString());
@@ -280,11 +279,6 @@ public class MainActivity extends AppCompatActivity {
         cameraPermissionLauncher.launch(Manifest.permission.CAMERA);
     }
 
-    private void requestFilePermissions() {
-        filePermissionsLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE);
-//        filePermissionsLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE);
-    }
-
     private final ActivityResultLauncher<String> cameraPermissionLauncher = registerForActivityResult(
             new ActivityResultContracts.RequestPermission(),
             isGranted -> {
@@ -298,30 +292,6 @@ public class MainActivity extends AppCompatActivity {
                             .setPositiveButton("ALLOW", (dialog, which) -> {
                                 dialog.dismiss();
                                 requestCameraPermission();
-                            })
-                            .setNegativeButton("CLOSE", (dialog, which) -> {
-                                dialog.dismiss();
-                                finish();
-                            })
-                            .create();
-                    alertDialog.show();
-                }
-            }
-    );
-
-    private final ActivityResultLauncher<String> filePermissionsLauncher = registerForActivityResult(
-            new ActivityResultContracts.RequestPermission(),
-            isGranted -> {
-                if (isGranted) {
-//                    startCameraPreview();
-                } else {
-                    AlertDialog alertDialog = new AlertDialog.Builder(this)
-                            .setTitle("Files Permission")
-                            .setMessage("The app couldn't function without the camera permission.")
-                            .setCancelable(false)
-                            .setPositiveButton("ALLOW", (dialog, which) -> {
-                                dialog.dismiss();
-                                requestFilePermissions();
                             })
                             .setNegativeButton("CLOSE", (dialog, which) -> {
                                 dialog.dismiss();
