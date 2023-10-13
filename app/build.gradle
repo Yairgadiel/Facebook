@@ -59,6 +59,7 @@ dependencies {
     // DocumentFile and ExitInterface
     implementation "androidx.documentfile:documentfile:1.0.1"
     implementation "androidx.exifinterface:exifinterface:1.3.6"
+    implementation 'androidx.preference:preference:1.2.1'
 
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.3'
