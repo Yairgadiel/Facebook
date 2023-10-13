@@ -75,16 +75,27 @@ class FileReader( private var faceNetModel: FaceNetModel ) {
                 .addOnSuccessListener { faces ->
                     if (faces.size != 0) {
                         mainScope.launch {
-                            val embedding = getEmbedding(image, faces[0].boundingBox)
-                            imageData.add(Pair(name, embedding))
-                            // Embedding stored, now proceed to the next image.
-                            if (imageCounter + 1 != numImages) {
-                                imageCounter += 1
-                                scanImage(data[imageCounter].first, data[imageCounter].second)
+                            val bbox = faces[0].boundingBox
+                            if (bbox.left < 0 || bbox.top < 0 || bbox.right > image.width || bbox.bottom > image.height) {
+                                if (imageCounter + 1 != numImages) {
+                                    imageCounter += 1
+                                    scanImage(data[imageCounter].first, data[imageCounter].second)
+                                }
                             } else {
-                                // Processing done, reset the file reader.
-                                callback.onProcessCompleted(imageData, numImagesWithNoFaces)
-                                reset()
+                                val embedding = getEmbedding(image, bbox)
+                                imageData.add(Pair(name, embedding))
+                                // Embedding stored, now proceed to the next image.
+                                if (imageCounter + 1 != numImages) {
+                                    imageCounter += 1
+                                    scanImage(
+                                        data[imageCounter].first,
+                                        data[imageCounter].second
+                                    )
+                                } else {
+                                    // Processing done, reset the file reader.
+                                    callback.onProcessCompleted(imageData, numImagesWithNoFaces)
+                                    reset()
+                                }
                             }
                         }
                     }
