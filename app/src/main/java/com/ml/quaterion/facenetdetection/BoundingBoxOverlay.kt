@@ -98,14 +98,14 @@ class BoundingBoxOverlay( context: Context , attributeSet: AttributeSet )
                         boundingBox.centerY(),
                         textPaint
                     )
-                    if ( drawMaskLabel ) {
-                        canvas?.drawText(
-                            face.maskLabel,
-                            boundingBox.centerX(),
-                            boundingBox.centerY() + 32,
-                            textPaint
-                        )
-                    }
+//                    if ( drawMaskLabel ) {
+//                        canvas?.drawText(
+//                            face.maskLabel,
+//                            boundingBox.centerX(),
+//                            boundingBox.centerY() + 32,
+//                            textPaint
+//                        )
+//                    }
                 }
             }
         }
