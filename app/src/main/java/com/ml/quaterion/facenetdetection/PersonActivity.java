@@ -17,9 +17,9 @@ public class PersonActivity extends AppCompatActivity {
 
     private static final String DETAILS_FILE_NAME = "person_details.json";
 
-    private static String PERSON_FOLDER_PATH_KEY = "person_folder";
+    public static String PERSON_FOLDER_PATH_KEY = "person_folder";
 
-    private static String PERSON_IMAGE_PATH_KEY = "person_image";
+    public static String PERSON_IMAGE_PATH_KEY = "person_image";
 
     // endregion
 
