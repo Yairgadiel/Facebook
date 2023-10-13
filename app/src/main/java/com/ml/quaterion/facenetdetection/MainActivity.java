@@ -24,8 +24,11 @@ import android.media.ExifInterface;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.provider.DocumentsContract;
+import android.provider.Settings;
 import android.text.method.ScrollingMovementMethod;
+import android.util.Log;
 import android.util.Size;
 import android.view.View;
 import android.view.WindowInsets;
@@ -53,6 +56,8 @@ import com.ml.quaterion.facenetdetection.model.FaceNetModel;
 import com.ml.quaterion.facenetdetection.model.ModelInfo;
 import com.ml.quaterion.facenetdetection.model.Models;
 import com.ml.quaterion.facenetdetection.ui.PredicationsAdapter;
+import com.ml.quaterion.facenetdetection.data.Person;
+import com.ml.quaterion.facenetdetection.data.PersonReader;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -63,8 +68,12 @@ import java.io.ObjectOutputStream;
 import java.util.ArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
+import java.util.Map;
+
 
 public class MainActivity extends AppCompatActivity {
+
+    private static final int REQUEST_FILES_PERM_KEY = 3535;
 
     private boolean isSerializedDataStored = false;
 
@@ -82,6 +91,7 @@ public class MainActivity extends AppCompatActivity {
     private ListenableFuture<ProcessCameraProvider> cameraProviderFuture;
     private SharedPreferences sharedPreferences;
 
+    private Map<String, Person> personData;
     // <----------------------- User controls --------------------------->
 
     // Use the device's GPU to perform faster computations.
@@ -112,6 +122,53 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (Environment.isExternalStorageManager()) {
+                // You already have permission to access external storage.
+                loadApp();
+            } else {
+                // Request permission to access external storage.
+                Intent intent = new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION);
+                intent.setData(Uri.parse("package:" + getPackageName()));
+                startActivityForResult(intent, REQUEST_FILES_PERM_KEY);
+            }
+        }
+    }
+
+//    @Override
+//    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+//        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+//
+//        if (requestCode == 3501) {
+//            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+//                loadApp();
+//            }
+//            else {
+//                ActivityCompat.requestPermissions(MainActivity.this, permissions, 3501);
+//                Log.d("Log", "permission not granted.");
+//            }
+//        }
+//    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+
+        if (requestCode == REQUEST_FILES_PERM_KEY) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                if (Environment.isExternalStorageManager()) {
+                    // Permission granted, you can access external storage now.
+                    loadApp();
+                } else {
+                    // Permission denied, handle accordingly.
+                    Log.d("Log", "no storage permissions");
+                }
+            }
+        }
+    }
+
+
+    public void loadApp() {
         // Remove the status bar to have a full screen experience
         // See this answer on SO -> https://stackoverflow.com/a/68152688/10878733
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -133,8 +190,16 @@ public class MainActivity extends AppCompatActivity {
         boundingBoxOverlay.setZOrderOnTop(true);
 
         PredicationsAdapter adapter = new PredicationsAdapter();
-        adapter.setOnItemClickListener(prediction -> Toast.makeText(MainActivity.this, prediction.getLabel(), Toast.LENGTH_SHORT).show());
+        adapter.setOnItemClickListener(prediction -> {
+            Intent intent = new Intent(getApplicationContext(), PersonActivity.class);
+            intent.putExtra(PersonActivity.PERSON_FOLDER_PATH_KEY, prediction.getLabel());
+            intent.putExtra(PersonActivity.PERSON_IMAGE_PATH_KEY, prediction.getImage());
+            startActivity(intent);
 
+            Toast.makeText(MainActivity.this, prediction.getLabel(), Toast.LENGTH_SHORT).show();
+        });
+
+        Utils.setContext(this);
         activityMainBinding.predicationsRv.setAdapter(adapter);
         activityMainBinding.predicationsRv.setLayoutManager(new LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false));
 
@@ -173,6 +238,10 @@ public class MainActivity extends AppCompatActivity {
                     .create();
             alertDialog.show();
         }
+
+        PersonReader personReader = new PersonReader("/sdcard/face/example.csv", "/sdcard/face/images/");
+        personData = personReader.read();
+        Logger.Companion.log(personData.toString());
     }
 
     // Attach the camera stream to the PreviewView.
@@ -296,6 +365,8 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 if (!errorFound) {
+                    Utils.setMainDirectory(dirUri);
+
                     activityMainBinding.loader.setVisibility(View.VISIBLE);
                     fileReader.run(images, new FileReader.ProcessCallback() {
                         @Override

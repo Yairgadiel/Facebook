@@ -72,7 +72,7 @@ class FrameAnalyser(
     // <-------------- User controls --------------------------->
 
     // Use any one of the two metrics, "cosine" or "l2"
-    private val metricToBeUsed = "l2"
+    private val metricToBeUsed = "cosine"
 
     // Use this variable to enable/disable mask detection.
     private val isMaskDetectionOn = true
@@ -222,7 +222,7 @@ class FrameAnalyser(
                         predictions.add(
                             Prediction(
                                 face.boundingBox,
-                                "Please remove the mask",
+                                "Unknown",
                                 maskLabel
                             )
                         )
@@ -234,8 +234,12 @@ class FrameAnalyser(
                 }
                 Log.e("Performance", "Inference time -> ${System.currentTimeMillis() - t1}")
             }
+
+            predictions.removeIf { it.label == "Unknown" || it.label == "Please remove the mask"}
+            val uiPredictions = predictions.toUiItems()
+
             withContext(Dispatchers.Main) {
-                adapter.setData(predictions.toUiItems())
+                adapter.setData(uiPredictions)
 
                 // Clear the BoundingBoxOverlay and set the new results ( boxes ) to be displayed.
                 boundingBoxOverlay.faceBoundingBoxes = predictions
@@ -319,6 +323,7 @@ class StaticFrameAnalyser(val model: FaceNetModel, val faceList: ArrayList<Pair<
     }
 }
 
+private fun List<Prediction>.toUiItems() = map { UiPrediction(label = it.label, image = Utils.getPicturePath(it.label)) }
 // Compute the L2 norm of ( x2 - x1 )
 private fun L2Norm(x1: FloatArray, x2: FloatArray): Float {
     return sqrt(x1.mapIndexed { i, xi -> (xi - x2[i]).pow(2) }.sum())

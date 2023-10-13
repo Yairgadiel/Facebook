@@ -1,5 +1,6 @@
 package com.ml.quaterion.facenetdetection.ui;
 
+import android.graphics.BitmapFactory;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -46,6 +47,9 @@ public class PredicationsAdapter extends ListAdapter<UiPrediction, PredicationsA
 
         // Bind the ViewHolder to a data item.
         holder.mTextView.setText(prediction.getLabel());
+
+        // todo check if ok in UI thread
+        holder.mImageView.setImageBitmap(BitmapFactory.decodeFile(prediction.getImage()));
 
         holder.itemView.setOnClickListener(view -> {
             if (onItemClickListener != null) {
