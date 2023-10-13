@@ -34,6 +34,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 import java.io.File
@@ -369,7 +370,7 @@ class FaceRecognizerTest {
         // Call the method you're testing
         val result = staticFrameAnalyser.inferSinglePerson(inputBitmaps)
 
-        // Check the result
-        // Example: assertEquals(expectedResult, result)
+        val person = result[0].first
+        assertEquals("izik", person)
     }
 }
