@@ -222,7 +222,7 @@ class FrameAnalyser(
                         predictions.add(
                             Prediction(
                                 face.boundingBox,
-                                "Please remove the mask",
+                                "Unknown",
                                 maskLabel
                             )
                         )
