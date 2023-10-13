@@ -1,3 +1,5 @@
+package com.ml.quaterion.facenetdetection;
+
 import android.content.Context;
 import android.content.SharedPreferences;
 
@@ -5,8 +7,6 @@ import androidx.lifecycle.MutableLiveData;
 import androidx.preference.PreferenceManager;
 
 public class SettingsRepo {
-
-    // region
 
     // Region Singleton
 
@@ -23,16 +23,33 @@ public class SettingsRepo {
 
     public void init(Context context) {
         _sharedPreferences = PreferenceManager.getDefaultSharedPreferences(context);
+        _sharedPreferences.registerOnSharedPreferenceChangeListener((sharedPreferences, key) -> {
+            if (key.equals(context.getString(R.string.max_results_key))) {
+                _resultsNum.setValue(Integer.parseInt(
+                        sharedPreferences.getString(key,"3")));
+            }
+        });
     }
 
     // endregion
 
-    // region Properties
+    // region Members
 
     private SharedPreferences _sharedPreferences;
     private MutableLiveData<Integer> _resultsNum;
 
     // endregion
 
+    // region Properties
+
+    public MutableLiveData<Integer> getResultsNum() {
+        return _resultsNum;
+    }
+
+    // endregion
+
     // region Public Methods
+
+
+
 }

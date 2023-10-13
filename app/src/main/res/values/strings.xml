@@ -10,6 +10,7 @@
     <string name="signature_title">Your signature</string>
 
     <!-- Results Preferences -->
+    <string name="max_results_key">max results</string>
     <string name="results_preference_title">Results</string>
     <string name="max_results_title">Maximum number of results per image</string>
 
