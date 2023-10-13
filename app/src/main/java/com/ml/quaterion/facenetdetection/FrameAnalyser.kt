@@ -111,6 +111,14 @@ class FrameAnalyser( context: Context ,
         }
     }
 
+    // TODO: call this function with images from camera reel
+    // Multiple images of same person
+    private suspend fun inferSinglePerson(cameraFramesBitmap: ArrayList<Bitmap>): ArrayList<Pair<String, Float>> {
+        return arrayListOf(
+            Pair("Izik", 100.0f)
+        )
+    }
+
 
     private suspend fun runModel( faces : List<Face> , cameraFrameBitmap : Bitmap ){
         withContext( Dispatchers.Default ) {
