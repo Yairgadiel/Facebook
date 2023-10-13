@@ -234,8 +234,12 @@ class FrameAnalyser(
                 }
                 Log.e("Performance", "Inference time -> ${System.currentTimeMillis() - t1}")
             }
+
+            predictions.removeIf { it.label == "Unknown" || it.label == "Please remove the mask"}
+            val uiPredictions = predictions.toUiItems()
+
             withContext(Dispatchers.Main) {
-                adapter.setData(predictions.toUiItems())
+                adapter.setData(uiPredictions)
 
                 // Clear the BoundingBoxOverlay and set the new results ( boxes ) to be displayed.
                 boundingBoxOverlay.faceBoundingBoxes = predictions
@@ -259,4 +263,4 @@ class FrameAnalyser(
     }
 }
 
-private fun List<Prediction>.toUiItems() = map { UiPrediction(label = it.label, image = "") }
+private fun List<Prediction>.toUiItems() = map { UiPrediction(label = it.label, image = Utils.getPicturePath(it.label)) }
