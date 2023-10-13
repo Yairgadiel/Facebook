@@ -56,6 +56,8 @@ import com.ml.quaterion.facenetdetection.model.FaceNetModel;
 import com.ml.quaterion.facenetdetection.model.ModelInfo;
 import com.ml.quaterion.facenetdetection.model.Models;
 import com.ml.quaterion.facenetdetection.ui.PredicationsAdapter;
+import com.ml.quaterion.facenetdetection.data.Person;
+import com.ml.quaterion.facenetdetection.data.PersonReader;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -66,6 +68,8 @@ import java.io.ObjectOutputStream;
 import java.util.ArrayList;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
+import java.util.Map;
+
 
 public class MainActivity extends AppCompatActivity {
 
@@ -87,6 +91,7 @@ public class MainActivity extends AppCompatActivity {
     private ListenableFuture<ProcessCameraProvider> cameraProviderFuture;
     private SharedPreferences sharedPreferences;
 
+    private Map<String, Person> personData;
     // <----------------------- User controls --------------------------->
 
     // Use the device's GPU to perform faster computations.
@@ -233,6 +238,10 @@ public class MainActivity extends AppCompatActivity {
                     .create();
             alertDialog.show();
         }
+
+        PersonReader personReader = new PersonReader("/sdcard/face/example.csv", "/sdcard/face/images/");
+        personData = personReader.read();
+        Logger.Companion.log(personData.toString());
     }
 
     // Attach the camera stream to the PreviewView.
