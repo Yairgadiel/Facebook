@@ -20,18 +20,25 @@ import android.graphics.Bitmap
 import android.util.Log
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
+import androidx.test.core.app.ApplicationProvider
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.Face
 import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
 import com.ml.quaterion.facenetdetection.model.FaceNetModel
 import com.ml.quaterion.facenetdetection.model.MaskDetectionModel
+import com.ml.quaterion.facenetdetection.model.Models.Companion.FACENET
 import com.ml.quaterion.facenetdetection.ui.PredicationsAdapter
 import com.ml.quaterion.facenetdetection.ui.UiPrediction
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.junit.Before
+import org.junit.Test
+import java.io.File
+import java.io.FileInputStream
+import java.io.ObjectInputStream
 import kotlin.math.pow
 import kotlin.math.sqrt
 
@@ -115,14 +122,6 @@ class FrameAnalyser(
                     image.close()
                 }
         }
-    }
-
-    // TODO: call this function with images from camera reel
-    // Multiple images of same person
-    private suspend fun inferSinglePerson(cameraFramesBitmap: ArrayList<Bitmap>): ArrayList<Pair<String, Float>> {
-        return arrayListOf(
-            Pair("Izik", 100.0f)
-        )
     }
 
     private suspend fun runModel(faces: List<Face>, cameraFrameBitmap: Bitmap) {
@@ -244,19 +243,133 @@ class FrameAnalyser(
             }
         }
     }
+}
 
-    // Compute the L2 norm of ( x2 - x1 )
-    private fun L2Norm(x1: FloatArray, x2: FloatArray): Float {
-        return sqrt(x1.mapIndexed { i, xi -> (xi - x2[i]).pow(2) }.sum())
-    }
+// Store the face embeddings in a ( String , FloatArray ) ArrayList.
+// Where String -> name of the person and FloatArray -> Embedding of the face.
+class StaticFrameAnalyser(val model: FaceNetModel, val faceList: ArrayList<Pair<String,FloatArray>>) {
+    private val realTimeOpts = FaceDetectorOptions.Builder()
+        .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
+        .build()
+    private val detector = FaceDetection.getClient(realTimeOpts)
 
-    // Compute the cosine of the angle between x1 and x2.
-    private fun cosineSimilarity(x1: FloatArray, x2: FloatArray): Float {
-        val mag1 = sqrt(x1.map { it * it }.sum())
-        val mag2 = sqrt(x2.map { it * it }.sum())
-        val dot = x1.mapIndexed { i, xi -> xi * x2[i] }.sum()
-        return dot / (mag1 * mag2)
+    private val nameScoreHashmap = HashMap<String, ArrayList<Float>>()
+
+    private var subject = FloatArray(model.embeddingDim)
+
+
+    // TODO: call this function with images from camera reel
+    // Multiple images of same person
+    public fun inferSinglePerson(cameraFramesBitmap: ArrayList<Bitmap>): ArrayList<Pair<String, Float>> {
+        val imageBitmap = cameraFramesBitmap[0]
+
+        // InputImage is MLKIT object
+        val inputImage = InputImage.fromBitmap(imageBitmap, 0)
+
+        detector.process(inputImage)
+            .addOnSuccessListener { faces ->
+                val predictions = ArrayList<Prediction>()
+                for (face in faces) {
+                    try {
+                        val croppedBitmap = BitmapUtils.cropRectFromBitmap(imageBitmap, face.boundingBox)
+
+                        // Runs FaceNet
+                        val subject = model.getFaceEmbedding(croppedBitmap)
+
+                        // Grouping similar faces using cosine similarity
+                        for (i in 0 until faceList.size) {
+                            nameScoreHashmap.compute(faceList[i].first) { _, scores ->
+                                // if cluster doesn't exist, initialize a new one
+                                val p = scores ?: ArrayList<Float>()
+                                p.add(cosineSimilarity(subject, faceList[i].second))
+                                p  // reassign the updated list
+                            }
+                        }
+
+                        // Compute the average of all cosine similarity scores for each cluster
+                        val avgScores = nameScoreHashmap.values.map { scores ->
+                            scores.toFloatArray().average()
+                        }
+                        Logger.log("Average score for each user : $nameScoreHashmap")
+
+                        val names = nameScoreHashmap.keys.toTypedArray()
+                        nameScoreHashmap.clear()
+
+                        // Identify the person based on cosine similarity
+                        val bestScoreUserName = if (avgScores.maxOrNull()!! > model.model.cosineThreshold) {
+                            names[avgScores.indexOf(avgScores.maxOrNull()!!)]
+                        } else {
+                            "Unknown"
+                        }
+                        Logger.log("Person identified as $bestScoreUserName")
+                        predictions.add(Prediction(face.boundingBox, bestScoreUserName))
+
+                    } catch (e: Exception) {
+                        // Handle any exception and continue with the next boxes
+                        Log.e("Model", "Exception in FrameAnalyser : ${e.message}")
+                        continue
+                    }
+                }
+            }
+
+        return arrayListOf(
+            Pair("Izik", 100.0f)
+        )
     }
 }
 
+// Compute the L2 norm of ( x2 - x1 )
+private fun L2Norm(x1: FloatArray, x2: FloatArray): Float {
+    return sqrt(x1.mapIndexed { i, xi -> (xi - x2[i]).pow(2) }.sum())
+}
+
+// Compute the cosine of the angle between x1 and x2.
+private fun cosineSimilarity(x1: FloatArray, x2: FloatArray): Float {
+    val mag1 = sqrt(x1.map { it * it }.sum())
+    val mag2 = sqrt(x2.map { it * it }.sum())
+    val dot = x1.mapIndexed { i, xi -> xi * x2[i] }.sum()
+    return dot / (mag1 * mag2)
+}
+
 private fun List<Prediction>.toUiItems() = map { UiPrediction(label = it.label, image = "") }
+
+class FaceRecognizerTest {
+    private lateinit var staticFrameAnalyser: StaticFrameAnalyser
+
+    private fun loadSerializedImageData(context: Context): ArrayList<Pair<String, FloatArray>> {
+        val imageData = context.assets.open("image_data")
+
+        try {
+            val ois = ObjectInputStream(imageData)
+            val data = ois.readObject()
+            ois.close()
+            return data as ArrayList<Pair<String, FloatArray>>
+        } catch (e: java.lang.Exception) {
+            e.printStackTrace()
+        }
+        return arrayListOf()
+    }
+
+
+    @Before
+    fun setup() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+
+        val modelInfo = FACENET
+        val faceNetModel = FaceNetModel(context, modelInfo, useGpu = false, useXNNPack = false)
+
+        staticFrameAnalyser = StaticFrameAnalyser(faceNetModel, loadSerializedImageData(context))
+    }
+
+    @Test
+    fun testInferSinglePerson() {
+        // Create a controlled input
+        val inputBitmaps = arrayListOf<Bitmap>()
+
+        // Call the method you're testing
+        val result = staticFrameAnalyser.inferSinglePerson(inputBitmaps)
+
+        // Check the result
+        // Example: assertEquals(expectedResult, result)
+    }
+}
