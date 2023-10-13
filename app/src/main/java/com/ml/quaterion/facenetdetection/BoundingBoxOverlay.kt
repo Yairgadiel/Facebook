@@ -42,7 +42,7 @@ class BoundingBoxOverlay( context: Context , attributeSet: AttributeSet )
     var faceBoundingBoxes: ArrayList<Prediction>? = null
 
     // Determines whether or not "mask" or "no mask" should be displayed.
-    var drawMaskLabel = true
+    var drawMaskLabel = false
 
     private var output2OverlayTransform: Matrix = Matrix()
 

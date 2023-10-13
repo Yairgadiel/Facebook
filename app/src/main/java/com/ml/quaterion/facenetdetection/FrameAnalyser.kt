@@ -61,7 +61,7 @@ class FrameAnalyser( context: Context ,
     // <-------------- User controls --------------------------->
 
     // Use any one of the two metrics, "cosine" or "l2"
-    private val metricToBeUsed = "l2"
+    private val metricToBeUsed = "cosine"
 
     // Use this variable to enable/disable mask detection.
     private val isMaskDetectionOn = true

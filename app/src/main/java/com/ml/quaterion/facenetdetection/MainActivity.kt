@@ -42,13 +42,49 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.documentfile.provider.DocumentFile
 import androidx.lifecycle.LifecycleOwner
+import androidx.room.Dao
+import androidx.room.Database
+import androidx.room.Entity
+import androidx.room.Insert
+import androidx.room.PrimaryKey
+import androidx.room.Query
+import androidx.room.Room.databaseBuilder
+import androidx.room.RoomDatabase
 import com.google.common.util.concurrent.ListenableFuture
 import com.ml.quaterion.facenetdetection.databinding.ActivityMainBinding
 import com.ml.quaterion.facenetdetection.model.FaceNetModel
 import com.ml.quaterion.facenetdetection.model.Models
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.*
+import java.nio.ByteBuffer
 import java.util.concurrent.Executors
 
+
+@Entity
+class ImageData {
+    @PrimaryKey(autoGenerate = true)
+    var id = 0
+    var directoryName: String? = null
+    var featureArray // You can serialize FloatArray to byte[] for storage
+            : ByteArray = ByteArray(4096)
+}
+
+@Dao
+interface ImageDataDao {
+    @Insert
+    fun insert(imageData: ImageData?)
+
+    @Query("SELECT * FROM ImageData")
+    fun getAll(): List<ImageData?>?
+}
+
+@Database(entities = [ImageData::class], version = 1, exportSchema = false)
+abstract class AppDatabase : RoomDatabase() {
+    abstract fun imageDataDao(): ImageDataDao?
+}
 
 class MainActivity : AppCompatActivity() {
 
@@ -60,13 +96,15 @@ class MainActivity : AppCompatActivity() {
     // Shared Pref key to check if the data was stored.
     private val SHARED_PREF_IS_DATA_STORED_KEY = "is_data_stored"
 
-    private lateinit var activityMainBinding : ActivityMainBinding
-    private lateinit var previewView : PreviewView
-    private lateinit var frameAnalyser  : FrameAnalyser
-    private lateinit var faceNetModel : FaceNetModel
-    private lateinit var fileReader : FileReader
-    private lateinit var cameraProviderFuture : ListenableFuture<ProcessCameraProvider>
+    private lateinit var db: AppDatabase
+    private lateinit var activityMainBinding: ActivityMainBinding
+    private lateinit var previewView: PreviewView
+    private lateinit var frameAnalyser: FrameAnalyser
+    private lateinit var faceNetModel: FaceNetModel
+    private lateinit var fileReader: FileReader
+    private lateinit var cameraProviderFuture: ListenableFuture<ProcessCameraProvider>
     private lateinit var sharedPreferences: SharedPreferences
+
 
     // <----------------------- User controls --------------------------->
 
@@ -91,9 +129,9 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
 
-        lateinit var logTextView : TextView
+        lateinit var logTextView: TextView
 
-        fun setMessage( message : String ) {
+        fun setMessage(message: String) {
             logTextView.text = message
         }
 
@@ -106,13 +144,12 @@ class MainActivity : AppCompatActivity() {
         // See this answer on SO -> https://stackoverflow.com/a/68152688/10878733
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             window.decorView.windowInsetsController!!
-                .hide( WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
-        }
-        else {
+                .hide(WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars())
+        } else {
             window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN
         }
-        activityMainBinding = ActivityMainBinding.inflate( layoutInflater )
-        setContentView( activityMainBinding.root )
+        activityMainBinding = ActivityMainBinding.inflate(layoutInflater)
+        setContentView(activityMainBinding.root)
 
         previewView = activityMainBinding.previewView
         logTextView = activityMainBinding.logTextview
@@ -120,41 +157,55 @@ class MainActivity : AppCompatActivity() {
         // Necessary to keep the Overlay above the PreviewView so that the boxes are visible.
         val boundingBoxOverlay = activityMainBinding.bboxOverlay
         boundingBoxOverlay.cameraFacing = cameraFacing
-        boundingBoxOverlay.setWillNotDraw( false )
-        boundingBoxOverlay.setZOrderOnTop( true )
+        boundingBoxOverlay.setWillNotDraw(false)
+        boundingBoxOverlay.setZOrderOnTop(true)
 
-        faceNetModel = FaceNetModel( this , modelInfo , useGpu , useXNNPack )
-        frameAnalyser = FrameAnalyser( this , boundingBoxOverlay , faceNetModel )
-        fileReader = FileReader( faceNetModel )
+        faceNetModel = FaceNetModel(this, modelInfo, useGpu, useXNNPack)
+        frameAnalyser = FrameAnalyser(this, boundingBoxOverlay, faceNetModel)
+        fileReader = FileReader(faceNetModel)
+
+        db = databaseBuilder(
+            applicationContext,
+            AppDatabase::class.java, "image-database"
+        ).build()
 
 
         // We'll only require the CAMERA permission from the user.
         // For scoped storage, particularly for accessing documents, we won't require WRITE_EXTERNAL_STORAGE or
         // READ_EXTERNAL_STORAGE permissions. See https://developer.android.com/training/data-storage
-        if ( ActivityCompat.checkSelfPermission( this , Manifest.permission.CAMERA ) != PackageManager.PERMISSION_GRANTED ) {
+        if (ActivityCompat.checkSelfPermission(
+                this,
+                Manifest.permission.CAMERA
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
             requestCameraPermission()
-        }
-        else {
+        } else {
             startCameraPreview()
         }
 
-        sharedPreferences = getSharedPreferences( getString( R.string.app_name ) , Context.MODE_PRIVATE )
-        isSerializedDataStored = sharedPreferences.getBoolean( SHARED_PREF_IS_DATA_STORED_KEY , false )
-        if ( !isSerializedDataStored ) {
-            Logger.log( "No serialized data was found. Select the images directory.")
+        setupData()
+    }
+
+    private fun setupData() {
+        sharedPreferences = getSharedPreferences(getString(R.string.app_name), Context.MODE_PRIVATE)
+        isSerializedDataStored = sharedPreferences.getBoolean(SHARED_PREF_IS_DATA_STORED_KEY, false)
+        if (!isSerializedDataStored) {
+            Logger.log("No serialized data was found. Select the images directory.")
             showSelectDirectoryDialog()
-        }
-        else {
-            val alertDialog = AlertDialog.Builder( this ).apply {
-                setTitle( "Serialized Data")
-                setMessage( "Existing image data was found on this device. Would you like to load it?" )
-                setCancelable( false )
-                setNegativeButton( "LOAD") { dialog, which ->
+        } else {
+            val alertDialog = AlertDialog.Builder(this).apply {
+                setTitle("Serialized Data")
+                setMessage("Existing image data was found on this device. Would you like to load it?")
+                setCancelable(false)
+                setNegativeButton("LOAD") { dialog, which ->
                     dialog.dismiss()
-                    frameAnalyser.faceList = loadSerializedImageData()
-                    Logger.log( "Serialized data loaded.")
+                    // Launching a coroutine to call the suspending function
+                    CoroutineScope(Dispatchers.Main).launch {
+                        frameAnalyser.faceList = loadSerializedImageData()
+                        Logger.log("Serialized data loaded.")
+                    }
                 }
-                setPositiveButton( "RESCAN") { dialog, which ->
+                setPositiveButton("RESCAN") { dialog, _ ->
                     dialog.dismiss()
                     launchChooseDirectoryIntent()
                 }
@@ -162,66 +213,73 @@ class MainActivity : AppCompatActivity() {
             }
             alertDialog.show()
         }
-
     }
+
 
     // ---------------------------------------------- //
 
     // Attach the camera stream to the PreviewView.
     private fun startCameraPreview() {
-        cameraProviderFuture = ProcessCameraProvider.getInstance( this )
-        cameraProviderFuture.addListener({
-            val cameraProvider = cameraProviderFuture.get()
-            bindPreview(cameraProvider) },
-            ContextCompat.getMainExecutor(this) )
+        cameraProviderFuture = ProcessCameraProvider.getInstance(this)
+        cameraProviderFuture.addListener(
+            {
+                val cameraProvider = cameraProviderFuture.get()
+                bindPreview(cameraProvider)
+            },
+            ContextCompat.getMainExecutor(this)
+        )
     }
 
-    private fun bindPreview(cameraProvider : ProcessCameraProvider) {
-        val preview : Preview = Preview.Builder().build()
-        val cameraSelector : CameraSelector = CameraSelector.Builder()
-            .requireLensFacing( cameraFacing )
+    private fun bindPreview(cameraProvider: ProcessCameraProvider) {
+        val preview: Preview = Preview.Builder().build()
+        val cameraSelector: CameraSelector = CameraSelector.Builder()
+            .requireLensFacing(cameraFacing)
             .build()
-        preview.setSurfaceProvider( previewView.surfaceProvider )
+        preview.setSurfaceProvider(previewView.surfaceProvider)
         val imageFrameAnalysis = ImageAnalysis.Builder()
-            .setTargetResolution(Size( 480, 640 ) )
+            .setTargetResolution(Size(480, 640))
             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
             .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_RGBA_8888)
             .build()
-        imageFrameAnalysis.setAnalyzer(Executors.newSingleThreadExecutor(), frameAnalyser )
-        cameraProvider.bindToLifecycle(this as LifecycleOwner, cameraSelector, preview , imageFrameAnalysis  )
+        imageFrameAnalysis.setAnalyzer(Executors.newSingleThreadExecutor(), frameAnalyser)
+        cameraProvider.bindToLifecycle(
+            this as LifecycleOwner,
+            cameraSelector,
+            preview,
+            imageFrameAnalysis
+        )
     }
 
     // We let the system handle the requestCode. This doesn't require onRequestPermissionsResult and
     // hence makes the code cleaner.
     // See the official docs -> https://developer.android.com/training/permissions/requesting#request-permission
     private fun requestCameraPermission() {
-        cameraPermissionLauncher.launch( Manifest.permission.CAMERA )
+        cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
     }
 
-    private val cameraPermissionLauncher = registerForActivityResult( ActivityResultContracts.RequestPermission() ) {
-        isGranted ->
-        if ( isGranted ) {
-            startCameraPreview()
-        }
-        else {
-            val alertDialog = AlertDialog.Builder( this ).apply {
-                setTitle( "Camera Permission")
-                setMessage( "The app couldn't function without the camera permission." )
-                setCancelable( false )
-                setPositiveButton( "ALLOW" ) { dialog, which ->
-                    dialog.dismiss()
-                    requestCameraPermission()
+    private val cameraPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+            if (isGranted) {
+                startCameraPreview()
+            } else {
+                val alertDialog = AlertDialog.Builder(this).apply {
+                    setTitle("Camera Permission")
+                    setMessage("The app couldn't function without the camera permission.")
+                    setCancelable(false)
+                    setPositiveButton("ALLOW") { dialog, which ->
+                        dialog.dismiss()
+                        requestCameraPermission()
+                    }
+                    setNegativeButton("CLOSE") { dialog, which ->
+                        dialog.dismiss()
+                        finish()
+                    }
+                    create()
                 }
-                setNegativeButton( "CLOSE" ) { dialog, which ->
-                    dialog.dismiss()
-                    finish()
-                }
-                create()
+                alertDialog.show()
             }
-            alertDialog.show()
-        }
 
-    }
+        }
 
 
     // ---------------------------------------------- //
@@ -229,11 +287,11 @@ class MainActivity : AppCompatActivity() {
 
     // Open File chooser to choose the images directory.
     private fun showSelectDirectoryDialog() {
-        val alertDialog = AlertDialog.Builder( this ).apply {
-            setTitle( "Select Images Directory")
-            setMessage( "As mentioned in the project\'s README file, please select a directory which contains the images." )
-            setCancelable( false )
-            setPositiveButton( "SELECT") { dialog, which ->
+        val alertDialog = AlertDialog.Builder(this).apply {
+            setTitle("Select Images Directory")
+            setMessage("As mentioned in the project\'s README file, please select a directory which contains the images.")
+            setCancelable(false)
+            setPositiveButton("SELECT") { dialog, which ->
                 dialog.dismiss()
                 launchChooseDirectoryIntent()
             }
@@ -244,91 +302,98 @@ class MainActivity : AppCompatActivity() {
 
 
     private fun launchChooseDirectoryIntent() {
-        val intent = Intent( Intent.ACTION_OPEN_DOCUMENT_TREE )
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE)
         // startForActivityResult is deprecated.
         // See this SO thread -> https://stackoverflow.com/questions/62671106/onactivityresult-method-is-deprecated-what-is-the-alternative
-        directoryAccessLauncher.launch( intent )
+        directoryAccessLauncher.launch(intent)
     }
 
 
     // Read the contents of the select directory here.
     // The system handles the request code here as well.
     // See this SO question -> https://stackoverflow.com/questions/47941357/how-to-access-files-in-a-directory-given-a-content-uri
-    private val directoryAccessLauncher = registerForActivityResult( ActivityResultContracts.StartActivityForResult() ) {
-        val dirUri = it.data?.data ?: return@registerForActivityResult
-        val childrenUri =
-            DocumentsContract.buildChildDocumentsUriUsingTree(
-                dirUri,
-                DocumentsContract.getTreeDocumentId( dirUri )
-            )
-        val tree = DocumentFile.fromTreeUri(this, childrenUri)
-        val images = ArrayList<Pair<String,Bitmap>>()
-        var errorFound = false
-        if ( tree!!.listFiles().isNotEmpty()) {
-            for ( doc in tree.listFiles() ) {
-                if ( doc.isDirectory && !errorFound ) {
-                    val name = doc.name!!
-                    for ( imageDocFile in doc.listFiles() ) {
-                        try {
-                            images.add( Pair( name , getFixedBitmap( imageDocFile.uri ) ) )
+    private val directoryAccessLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            val dirUri = it.data?.data ?: return@registerForActivityResult
+            val childrenUri =
+                DocumentsContract.buildChildDocumentsUriUsingTree(
+                    dirUri,
+                    DocumentsContract.getTreeDocumentId(dirUri)
+                )
+            val tree = DocumentFile.fromTreeUri(this, childrenUri)
+            val images = ArrayList<Pair<String, Bitmap>>()
+            var errorFound = false
+            if (tree!!.listFiles().isNotEmpty()) {
+                for (doc in tree.listFiles()) {
+                    if (doc.isDirectory && !errorFound) {
+                        val name = doc.name!!
+                        for (imageDocFile in doc.listFiles()) {
+                            try {
+                                images.add(Pair(name, getFixedBitmap(imageDocFile.uri)))
+                            } catch (e: Exception) {
+                                errorFound = true
+                                Logger.log(
+                                    "Could not parse an image in $name directory. Make sure that the file structure is " +
+                                            "as described in the README of the project and then restart the app."
+                                )
+                                break
+                            }
                         }
-                        catch ( e : Exception ) {
-                            errorFound = true
-                            Logger.log( "Could not parse an image in $name directory. Make sure that the file structure is " +
-                                    "as described in the README of the project and then restart the app." )
-                            break
-                        }
+                        Logger.log("Found ${doc.listFiles().size} images in $name directory")
+                    } else {
+                        errorFound = true
+                        Logger.log(
+                            "The selected folder should contain only directories. Make sure that the file structure is " +
+                                    "as described in the README of the project and then restart the app."
+                        )
                     }
-                    Logger.log( "Found ${doc.listFiles().size} images in $name directory" )
                 }
-                else {
-                    errorFound = true
-                    Logger.log( "The selected folder should contain only directories. Make sure that the file structure is " +
-                            "as described in the README of the project and then restart the app." )
+            } else {
+                errorFound = true
+                Logger.log(
+                    "The selected folder doesn't contain any directories. Make sure that the file structure is " +
+                            "as described in the README of the project and then restart the app."
+                )
+            }
+            if (!errorFound) {
+                fileReader.run(images, fileReaderCallback)
+                Logger.log("Detecting faces in ${images.size} images ...")
+            } else {
+                val alertDialog = AlertDialog.Builder(this).apply {
+                    setTitle("Error while parsing directory")
+                    setMessage(
+                        "There were some errors while parsing the directory. Please see the log below. Make sure that the file structure is " +
+                                "as described in the README of the project and then tap RESELECT"
+                    )
+                    setCancelable(false)
+                    setPositiveButton("RESELECT") { dialog, which ->
+                        dialog.dismiss()
+                        launchChooseDirectoryIntent()
+                    }
+                    setNegativeButton("CANCEL") { dialog, which ->
+                        dialog.dismiss()
+                        finish()
+                    }
+                    create()
                 }
+                alertDialog.show()
             }
         }
-        else {
-            errorFound = true
-            Logger.log( "The selected folder doesn't contain any directories. Make sure that the file structure is " +
-                    "as described in the README of the project and then restart the app." )
-        }
-        if ( !errorFound ) {
-            fileReader.run( images , fileReaderCallback )
-            Logger.log( "Detecting faces in ${images.size} images ..." )
-        }
-        else {
-            val alertDialog = AlertDialog.Builder( this ).apply {
-                setTitle( "Error while parsing directory")
-                setMessage( "There were some errors while parsing the directory. Please see the log below. Make sure that the file structure is " +
-                        "as described in the README of the project and then tap RESELECT" )
-                setCancelable( false )
-                setPositiveButton( "RESELECT") { dialog, which ->
-                    dialog.dismiss()
-                    launchChooseDirectoryIntent()
-                }
-                setNegativeButton( "CANCEL" ){ dialog , which ->
-                    dialog.dismiss()
-                    finish()
-                }
-                create()
-            }
-            alertDialog.show()
-        }
-    }
 
 
     // Get the image as a Bitmap from given Uri and fix the rotation using the Exif interface
     // Source -> https://stackoverflow.com/questions/14066038/why-does-an-image-captured-using-camera-intent-gets-rotated-on-some-devices-on-a
-    private fun getFixedBitmap( imageFileUri : Uri ) : Bitmap {
-        var imageBitmap = BitmapUtils.getBitmapFromUri( contentResolver , imageFileUri )
-        val exifInterface = ExifInterface( contentResolver.openInputStream( imageFileUri )!! )
+    private fun getFixedBitmap(imageFileUri: Uri): Bitmap {
+        var imageBitmap = BitmapUtils.getBitmapFromUri(contentResolver, imageFileUri)
+        val exifInterface = ExifInterface(contentResolver.openInputStream(imageFileUri)!!)
         imageBitmap =
-            when (exifInterface.getAttributeInt( ExifInterface.TAG_ORIENTATION ,
-                ExifInterface.ORIENTATION_UNDEFINED )) {
-                ExifInterface.ORIENTATION_ROTATE_90 -> BitmapUtils.rotateBitmap( imageBitmap , 90f )
-                ExifInterface.ORIENTATION_ROTATE_180 -> BitmapUtils.rotateBitmap( imageBitmap , 180f )
-                ExifInterface.ORIENTATION_ROTATE_270 -> BitmapUtils.rotateBitmap( imageBitmap , 270f )
+            when (exifInterface.getAttributeInt(
+                ExifInterface.TAG_ORIENTATION,
+                ExifInterface.ORIENTATION_UNDEFINED
+            )) {
+                ExifInterface.ORIENTATION_ROTATE_90 -> BitmapUtils.rotateBitmap(imageBitmap, 90f)
+                ExifInterface.ORIENTATION_ROTATE_180 -> BitmapUtils.rotateBitmap(imageBitmap, 180f)
+                ExifInterface.ORIENTATION_ROTATE_270 -> BitmapUtils.rotateBitmap(imageBitmap, 270f)
                 else -> imageBitmap
             }
         return imageBitmap
@@ -339,32 +404,58 @@ class MainActivity : AppCompatActivity() {
 
 
     private val fileReaderCallback = object : FileReader.ProcessCallback {
-        override fun onProcessCompleted(data: ArrayList<Pair<String, FloatArray>>, numImagesWithNoFaces: Int) {
+        override fun onProcessCompleted(
+            data: ArrayList<Pair<String, FloatArray>>,
+            numImagesWithNoFaces: Int
+        ) {
             frameAnalyser.faceList = data
-            saveSerializedImageData( data )
-            Logger.log( "Images parsed. Found $numImagesWithNoFaces images with no faces." )
+            saveSerializedImageData(data)
+            Logger.log("Images parsed. Found $numImagesWithNoFaces images with no faces.")
         }
     }
 
 
-    private fun saveSerializedImageData(data : ArrayList<Pair<String,FloatArray>> ) {
-        val serializedDataFile = File( filesDir , SERIALIZED_DATA_FILENAME )
-        ObjectOutputStream( FileOutputStream( serializedDataFile )  ).apply {
-            writeObject( data )
-            flush()
-            close()
+    private fun saveSerializedImageData(data: ArrayList<Pair<String, FloatArray>>) {
+        // Insert data
+        Thread {
+            val imageData = ImageData()
+            imageData.directoryName = "example"
+            imageData.featureArray = serializeFloatArray(floatArrayOf())
+            db.imageDataDao()!!.insert(imageData)
+        }.start()
+
+//        sharedPreferences.edit().putBoolean( SHARED_PREF_IS_DATA_STORED_KEY , true ).apply()
+    }
+
+    private fun serializeFloatArray(floatArray: FloatArray): ByteArray {
+        val byteBuffer = ByteBuffer.allocate(4 * floatArray.size)
+        val floatBuffer = byteBuffer.asFloatBuffer()
+        floatBuffer.put(floatArray)
+        return byteBuffer.array()
+    }
+
+    private fun deserializeFloatArray(byteArray: ByteArray): FloatArray {
+        val byteBuffer = ByteBuffer.wrap(byteArray)
+        val floatBuffer = byteBuffer.asFloatBuffer()
+        val floatArray = FloatArray(floatBuffer.remaining())
+        floatBuffer.get(floatArray)
+        return floatArray
+    }
+
+
+    private suspend fun loadSerializedImageData(): ArrayList<Pair<String, FloatArray>> {
+        return withContext(Dispatchers.IO) {
+            val dataList = db.imageDataDao()?.getAll()  // Make sure your DAO method is named getAll
+            val result = ArrayList<Pair<String, FloatArray>>()
+            if (dataList != null) {
+                for (data in dataList) {
+                    if (data != null) {
+                        val featureArray = deserializeFloatArray(data.featureArray)
+                        result.add(Pair(data.directoryName!!, featureArray))
+                    }
+                }
+            }
+            result
         }
-        sharedPreferences.edit().putBoolean( SHARED_PREF_IS_DATA_STORED_KEY , true ).apply()
     }
-
-
-    private fun loadSerializedImageData() : ArrayList<Pair<String,FloatArray>> {
-        val serializedDataFile = File( filesDir , SERIALIZED_DATA_FILENAME )
-        val objectInputStream = ObjectInputStream( FileInputStream( serializedDataFile ) )
-        val data = objectInputStream.readObject() as ArrayList<Pair<String,FloatArray>>
-        objectInputStream.close()
-        return data
-    }
-
-
 }
